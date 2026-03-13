@@ -2,17 +2,40 @@ import { useState } from "react";
 import "./styles/form.css";
 import { Copy } from "lucide-react";
 
+interface FormPayload {
+  username: string;
+  passwordOptions: {
+    uppercase: boolean;
+    lowercase: boolean;
+    numbers: boolean;
+    symbols: boolean;
+  };
+  passwordLength: number;
+  fanOf: string;
+}
+
+interface ApiResponse {
+  success: boolean;
+  message?: string;
+  generatedPassword?: string;
+  data?: unknown;
+}
+
 export function PasswordFormGenApp() {
+  const [username, setUsername] = useState("");
   const [passwordLength, setPasswordLength] = useState(8);
   const [generatedPassword, setGeneratedPassword] = useState("");
   const [copied, setCopied] = useState(false);
-  const [selected, setSelected] = useState("");
+  const [selectedFan, setSelectedFan] = useState("");
+  const [selectedFormat, setSelectedFormat] = useState("");
   const [options, setOptions] = useState({
     uppercase: false,
     lowercase: false,
     numbers: false,
     symbols: false,
   });
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(generatedPassword);
@@ -24,29 +47,75 @@ export function PasswordFormGenApp() {
     setOptions((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleGenerate = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    const lowercase = "abcdefghijklmnopqrstuvwxyz";
-    const numbers = "0123456789";
-    const symbols = "!@#$%^&*()_+-=[]{}|;:,.<>?";
-
-    let charset = "";
-    if (options.uppercase) charset += uppercase;
-    if (options.lowercase) charset += lowercase;
-    if (options.numbers) charset += numbers;
-    if (options.symbols) charset += symbols;
-
-    // Si no hay ninguna opción seleccionada, usa todas
-    if (charset === "") charset = uppercase + lowercase + numbers + symbols;
-
-    let password = "";
-    for (let i = 0; i < passwordLength; i++) {
-      password += charset.charAt(Math.floor(Math.random() * charset.length));
+  const handleDownload = () => {
+    if (!generatedPassword) {
+      alert("Generate a password first before downloading.");
+      return;
+    }
+    if (!selectedFormat) {
+      alert("Please select a download format (CSV or TXT).");
+      return;
     }
 
-    setGeneratedPassword(password);
+    let content = "";
+    let mimeType = "";
+    let fileName = "";
+
+    if (selectedFormat === "csv") {
+      content = `username,password\n"${username}","${generatedPassword}"`;
+      mimeType = "text/csv";
+      fileName = "credentials.csv";
+    } else if (selectedFormat === "txt") {
+      content = `Username: ${username}\nPassword: ${generatedPassword}`;
+      mimeType = "text/plain";
+      fileName = "credentials.txt";
+    }
+
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleGenerate = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const formPayload: FormPayload = {
+      username,
+      passwordOptions: { ...options },
+      passwordLength,
+      fanOf: selectedFan,
+    };
+
+    setApiError(null);
+    setIsLoading(true);
+
+    try {
+      const response = await fetch("http://localhost:3000/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formPayload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+
+      const data: ApiResponse = await response.json();
+
+      if (data.generatedPassword) {
+        setGeneratedPassword(data.generatedPassword);
+      }
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "Error desconocido");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -55,7 +124,12 @@ export function PasswordFormGenApp() {
       <form onSubmit={handleGenerate}>
         <div className="form-group">
           <label>Username</label>
-          <input type="text" placeholder="Enter username" />
+          <input
+            type="text"
+            placeholder="Enter username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
         </div>
 
         <div className="form-group">
@@ -97,6 +171,52 @@ export function PasswordFormGenApp() {
         </div>
 
         <div className="form-group">
+          <label className="section-label">Which of this are you a fan?</label>
+          <div className="checkbox-group">
+            <label className="checkbox-label">
+              <input
+                type="radio"
+                name="fan"
+                value="harry-potter"
+                checked={selectedFan === "harry-potter"}
+                onChange={(e) => setSelectedFan(e.target.value)}
+              />
+              <span>Harry Potter</span>
+            </label>
+            <label className="checkbox-label">
+              <input
+                type="radio"
+                name="fan"
+                value="lord-of-the-rings"
+                checked={selectedFan === "lord-of-the-rings"}
+                onChange={(e) => setSelectedFan(e.target.value)}
+              />
+              <span>Lord of the rings</span>
+            </label>
+            <label className="checkbox-label">
+              <input
+                type="radio"
+                name="fan"
+                value="star-wars"
+                checked={selectedFan === "star-wars"}
+                onChange={(e) => setSelectedFan(e.target.value)}
+              />
+              <span>Star Wars</span>
+            </label>
+            <label className="checkbox-label">
+              <input
+                type="radio"
+                name="fan"
+                value="star-trek"
+                checked={selectedFan === "star-trek"}
+                onChange={(e) => setSelectedFan(e.target.value)}
+              />
+              <span>Star Trek</span>
+            </label>
+          </div>
+        </div>
+
+        <div className="form-group">
           <label className="section-label">
             Password Length:
             <span className="length-value">{passwordLength}</span>
@@ -115,8 +235,8 @@ export function PasswordFormGenApp() {
           </div>
         </div>
 
-        <button type="submit" className="generate-btn">
-          Generate Password
+        <button type="submit" className="generate-btn" disabled={isLoading}>
+          {isLoading ? "Generating..." : "Generate Password"}
         </button>
 
         <div className="form-group generated-group">
@@ -129,32 +249,51 @@ export function PasswordFormGenApp() {
           </div>
           {copied && <span className="copied-msg">Password copied!</span>}
         </div>
+
+        {apiError && (
+          <div className="form-group">
+            <span
+              style={{
+                color: "#f87171",
+                fontSize: "13px",
+                background: "#2e0f0f",
+                padding: "8px 12px",
+                borderRadius: "6px",
+                display: "block",
+              }}
+            >
+              ⚠ API Error: {apiError}
+            </span>
+          </div>
+        )}
+
         <div className="form-group">
           <label className="section-label">Download Format</label>
           <div className="checkbox-group">
             <label className="checkbox-label">
               <input
                 type="radio"
-                name="size"
+                name="format"
                 value="csv"
-                checked={selected === "csv"}
-                onChange={(e) => setSelected(e.target.value)}
+                checked={selectedFormat === "csv"}
+                onChange={(e) => setSelectedFormat(e.target.value)}
               />
               <span>CSV</span>
             </label>
             <label className="checkbox-label">
               <input
                 type="radio"
-                name="size"
+                name="format"
                 value="txt"
-                checked={selected === "txt"}
-                onChange={(e) => setSelected(e.target.value)}
+                checked={selectedFormat === "txt"}
+                onChange={(e) => setSelectedFormat(e.target.value)}
               />
               <span>TXT</span>
             </label>
           </div>
         </div>
-        <button type="submit" className="generate-btn">
+
+        <button type="button" className="generate-btn" onClick={handleDownload}>
           Download
         </button>
       </form>
