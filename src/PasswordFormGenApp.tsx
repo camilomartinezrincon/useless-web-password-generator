@@ -98,6 +98,7 @@ export function PasswordFormGenApp() {
         " https://useless-web-password-gen-open-ia-api-vercel-6wpc78o43.vercel.app/api/chat",
         {
           method: "POST",
+          mode: "cors",
           headers: {
             "Content-Type": "application/json",
           },
