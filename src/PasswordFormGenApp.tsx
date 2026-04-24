@@ -95,7 +95,7 @@ export function PasswordFormGenApp() {
 
     try {
       const response = await fetch(
-        "https://open-ia-password-gen.onrender.com/api/chat",
+        " https://useless-web-password-gen-open-ia-api-vercel-6wpc78o43.vercel.app/api/chat",
         {
           method: "POST",
           headers: {
